@@ -13,6 +13,7 @@
     "@libsql/client": "^0.17.4",
     "@tailwindcss/vite": "^4.3.1",
     "@vercel/blob": "^2.6.1",
+    "@vercel/functions": "^3.9.8",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.21.0",
     "nodemailer": "^9.0.3",

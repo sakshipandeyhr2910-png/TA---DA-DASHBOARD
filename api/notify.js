@@ -1,6 +1,8 @@
 // Vercel serverless function — HR action emails, OTP emails via Resend + Turso OTP storage.
 // Requires RESEND_API_KEY and TURSO_* environment variables.
 
+import { waitUntil } from '@vercel/functions';
+
 // ── Turso helpers for OTP storage ─────────────────────────────────────────────
 // Module-level cache — avoids repeated dynamic import + table creation on every request
 
@@ -242,9 +244,10 @@ export default async function handler(req, res) {
 
   const { type } = body;
 
-  // ── OTP: generate, save to Turso, AND send email — all in one call ──────────
-  // Turso save + Resend email run in parallel. Returns only when email is confirmed
-  // sent, so the client knows the OTP is already in the trainer's inbox.
+  // ── OTP: generate, save to Turso, then send email in the background ─────────
+  // The OTP is shown on-screen the moment it's saved to Turso — the trainer never
+  // has to wait on (or be blocked by) email delivery. The email send still runs via
+  // waitUntil so it completes after the response, as a backup record in the inbox.
   if (type === 'send-otp') {
     const { email, trainerName } = body;
     if (!email || !email.includes('@')) {
@@ -256,12 +259,6 @@ export default async function handler(req, res) {
     const otpSubject = `${otp} is your Koenig TA/DA Portal OTP`;
     const otpHtml    = buildOtpEmailHtml(trainerName || 'Trainer', otp);
     const otpText    = `Hi ${trainerName || 'Trainer'},\n\nYour OTP for Koenig TA/DA Portal login is: ${otp}\n\nValid for 15 minutes. Do not share this with anyone.\n\n-- Koenig Solutions`;
-
-    // Run Turso save + email send in parallel
-    const savePromise = saveOtp(email, otp).catch(err => {
-      console.error('OTP Turso save error:', err && err.message);
-      throw new Error('Could not save OTP. Please try again.');
-    });
 
     const brevoKey  = (process.env.BREVO_API_KEY || '').trim();
     const brevoUser = (process.env.BREVO_USER || '').trim();
@@ -325,18 +322,22 @@ export default async function handler(req, res) {
         console.log(`[DEV OTP] ${email} → ${otp}`); return;
       }
 
-      throw new Error('All email providers failed. Please try again.');
+      console.error('All email providers failed for OTP to', email);
     }
 
     try {
-      await Promise.all([savePromise, sendEmailWithFallback()]);
-      // Return OTP so client can show it on screen — trainer can login instantly
-      // without waiting for email. Email still arrives as a backup record.
-      return res.status(200).json({ success: true, otp });
+      await saveOtp(email, otp);
     } catch (err) {
-      console.error('OTP send failed:', err && err.message);
-      return res.status(502).json({ error: err.message || 'Failed to send OTP. Please try again.' });
+      console.error('OTP Turso save error:', err && err.message);
+      return res.status(502).json({ error: 'Could not save OTP. Please try again.' });
     }
+
+    // Fire-and-forget — do not block the response on email delivery.
+    waitUntil(sendEmailWithFallback());
+
+    // Return OTP so client can show it on screen — trainer can login instantly
+    // without waiting for (or being blocked by) email delivery.
+    return res.status(200).json({ success: true, otp });
   }
 
   // ── OTP step 2 (legacy no-op — kept for any in-flight requests) ───────────
