@@ -409,8 +409,10 @@ function normalizeLeaveRecord(r: LeaveRecord): LeaveRecord {
 // any other employee/date — only suppresses this exact (empCode, date) from counting as a
 // leave day. Keyed as "<empCode>|<ISO date>". Add entries only on explicit HR confirmation.
 // Vaibhav Gupta EMP-2361, 2026-08-04: confirmed by HR Admin he was not on leave that day.
+// Aastha Mehta EMP-3681, 2026-10-12: PMS API 237 returns an approved leave that RMS does not have.
 const LEAVE_RECORD_OVERRIDE_EXCLUDE = new Set<string>([
   '2361|2026-08-04',
+  '3681|2026-10-12',
 ]);
 
 function parseLeaveDate(raw: string | null): string {

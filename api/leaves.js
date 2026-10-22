@@ -10,11 +10,6 @@ export const config = { maxDuration: 10 }; // Vercel Hobby plan hard cap
 
 const BASE = 'https://api.koenig-solutions.com';
 
-// emp 3681: PMS API 237 returns an approved 12 Oct 2026 leave that RMS does not have.
-const LEAVE_OVERRIDES = [
-  { empCode: '3681', from: '2026-10-12', to: '2026-10-12' },
-];
-
 async function getToken(userName, userPassword, userRole) {
   try {
     const content = await getKoenigToken(userName, userPassword, userRole);
@@ -83,17 +78,6 @@ export default async function handler(req, res) {
       try { content = JSON.parse(content); } catch { content = []; }
     }
     if (!Array.isArray(content)) content = [];
-
-    // Manual overrides: leaves PMS still reports that HR has confirmed are not real
-    // (no matching leave in RMS), so the trainer can still claim for those dates.
-    // Applied here so every consumer (bill creation, claim creation, claim detail) agrees.
-    content = content.filter((l) => {
-      const from = String(l.from_date ?? '').slice(0, 10);
-      const to   = String(l.to_date   ?? '').slice(0, 10);
-      return !LEAVE_OVERRIDES.some(
-        (o) => o.empCode === empCode && o.from === from && o.to === to
-      );
-    });
 
     return res.status(200).json({ leaves: content });
 

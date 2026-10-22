@@ -1544,7 +1544,11 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
           // Manual per-record exception — mirrors CreateTADABill.tsx's
           // LEAVE_RECORD_OVERRIDE_EXCLUDE. Vaibhav Gupta EMP-2361, 2026-08-04: HR Admin
           // confirmed he was not actually on leave that day despite the PMS record.
-          if (!(overrideEmpCode === '2361' && iso === '2026-08-04')) approvedLeaveDates.add(iso);
+          // Aastha Mehta EMP-3681, 2026-10-12: PMS leave not present in RMS.
+          const isOverriddenLeave =
+            (overrideEmpCode === '2361' && iso === '2026-08-04') ||
+            (overrideEmpCode === '3681' && iso === '2026-10-12');
+          if (!isOverriddenLeave) approvedLeaveDates.add(iso);
           cur2.setDate(cur2.getDate() + 1);
         }
       });
