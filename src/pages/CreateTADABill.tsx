@@ -2509,6 +2509,30 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
   const [leavesLoading, setLeavesLoading] = useState(false);
   const [leavesError, setLeavesError] = useState('');
 
+  // Pull leaves from PMS every time the wizard has a valid date range — on a draft being
+  // opened (dates restored), and whenever the range changes — not only when Fetch is
+  // clicked, so a leave cancelled in PMS is never left marked from stale state. Skipped when
+  // editing a submitted bill. A page load always starts a new session (see App.tsx), so
+  // this runs on every login/refresh as soon as a range exists.
+  const leaveRefreshSeq = useRef(0);
+  useEffect(() => {
+    const code = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+    if (!code || !fromDate || !toDate || toDate < fromDate || editClaimIdRef.current) return;
+    const seq = ++leaveRefreshSeq.current;
+    fetchEmployeeLeaves(code, fromDate, toDate)
+      .then(all => {
+        if (seq !== leaveRefreshSeq.current) return;
+        const inRange = leavesInRange(all, fromDate, toDate);
+        setPmsLeaves(inRange);
+        setLeavesError('');
+        setLeaveDates(prev => mergeLeaveDates(prev, inRange, fromDate, toDate, code));
+      })
+      .catch(err => {
+        if (seq !== leaveRefreshSeq.current) return;
+        setLeavesError(err instanceof Error ? err.message : 'Could not refresh leave records');
+      });
+  }, [currentUser?.trainerId, fromDate, toDate]);
+
   function toggleLeaveDate(iso: string) {
     setLeaveDates(prev => {
       const next = new Set(prev);
@@ -4248,20 +4272,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
       if (wz.miscExpenses?.length) setMiscExpenses(wz.miscExpenses);
       if (wz.advances?.length) setAdvances(wz.advances);
       if (wz.employeeRemarks) setEmployeeRemarks(wz.employeeRemarks);
-
-      // The draft's saved leave days are a snapshot — re-pull leaves from PMS so a leave
-      // cancelled/rejected since the draft was saved is not still counted against DA.
-      const draftEmpCode = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
-      if (draftEmpCode && wz.fromDate && wz.toDate && wz.assignments?.length) {
-        const dFrom = wz.fromDate, dTo = wz.toDate;
-        fetchEmployeeLeaves(draftEmpCode, dFrom, dTo)
-          .then(all => {
-            const inRange = leavesInRange(all, dFrom, dTo);
-            setPmsLeaves(inRange);
-            setLeaveDates(prev => mergeLeaveDates(prev, inRange, dFrom, dTo, draftEmpCode));
-          })
-          .catch(err => setLeavesError(err instanceof Error ? err.message : 'Could not refresh leave records'));
-      }
+      // The draft's saved leave days are a snapshot; restoring its dates triggers the
+      // leave refresh effect above, which re-pulls PMS and drops cancelled leaves.
     } catch { /* corrupt draft — ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
