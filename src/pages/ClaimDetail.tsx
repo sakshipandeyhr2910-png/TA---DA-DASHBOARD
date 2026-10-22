@@ -1545,9 +1545,10 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
           // LEAVE_RECORD_OVERRIDE_EXCLUDE. Vaibhav Gupta EMP-2361, 2026-08-04: HR Admin
           // confirmed he was not actually on leave that day despite the PMS record.
           // Aastha Mehta EMP-3681, 2026-10-12: PMS leave not present in RMS.
-          const isOverriddenLeave =
-            (overrideEmpCode === '2361' && iso === '2026-08-04') ||
-            (overrideEmpCode === '3681' && iso === '2026-10-12');
+          // EMP-2893, 2026-10-05 / 2026-10-07: cancelled by the employee, still in PMS.
+          const isOverriddenLeave = [
+            '2361|2026-08-04', '3681|2026-10-12', '2893|2026-10-05', '2893|2026-10-07',
+          ].includes(`${overrideEmpCode}|${iso}`);
           if (!isOverriddenLeave) approvedLeaveDates.add(iso);
           cur2.setDate(cur2.getDate() + 1);
         }

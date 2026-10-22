@@ -413,6 +413,10 @@ function normalizeLeaveRecord(r: LeaveRecord): LeaveRecord {
 const LEAVE_RECORD_OVERRIDE_EXCLUDE = new Set<string>([
   '2361|2026-08-04',
   '3681|2026-10-12',
+  // EMP-2893, 2026-10-05 and 2026-10-07: cancelled by the employee but PMS API 237 still
+  // returns them (Approved / In Process); HR confirmed.
+  '2893|2026-10-05',
+  '2893|2026-10-07',
 ]);
 
 function leavesInRange(all: LeaveRecord[], fromDate: string, toDate: string): LeaveRecord[] {
