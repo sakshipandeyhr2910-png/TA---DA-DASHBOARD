@@ -415,6 +415,58 @@ const LEAVE_RECORD_OVERRIDE_EXCLUDE = new Set<string>([
   '3681|2026-10-12',
 ]);
 
+function leavesInRange(all: LeaveRecord[], fromDate: string, toDate: string): LeaveRecord[] {
+  // Client-side safety filter: keep only leaves that overlap the selected range
+  // (server already filters, but guard against stale/unfiltered responses)
+  const inRange = all.filter(r => {
+    const fd = parseLeaveDate(r.from_date);
+    const td = parseLeaveDate(r.to_date) || fd;
+    if (!fd) return false;
+    // Overlap: leave starts before range end AND leave ends after range start
+    return fd <= toDate && td >= fromDate;
+  });
+  inRange.sort((a, b) => parseLeaveDate(a.from_date).localeCompare(parseLeaveDate(b.from_date)));
+  return inRange;
+}
+
+// Recomputes the leave-day set from the live PMS response. Only APPROVED leaves are marked
+// — a Cancelled or still-Pending record must not suppress DA (matches ClaimDetail.tsx's
+// approvedLeaveDates). Days covered by ANY PMS record, whatever its status, are taken from
+// PMS alone, so a leave cancelled since the last load (or since a draft was saved) drops out
+// instead of staying marked; days outside every PMS record keep their existing (manual) marks.
+function mergeLeaveDates(
+  prev: Set<string>,
+  inRange: LeaveRecord[],
+  fromDate: string,
+  toDate: string,
+  overrideEmpCode: string,
+): Set<string> {
+  const covered = new Set<string>();
+  const approved = new Set<string>();
+  inRange.forEach(r => {
+    const fd = parseLeaveDate(r.from_date);
+    const td = parseLeaveDate(r.to_date) || fd;
+    if (!fd) return;
+    const isApproved = isApprovedLeave(r.leave_status);
+    // Expand every calendar day in [fd, td] using UTC-only arithmetic to avoid
+    // any local timezone shift (e.g. UTC-5 would shift date by -1 day otherwise).
+    let cur = fd;
+    while (cur <= td) {
+      if (cur >= fromDate && cur <= toDate) {
+        covered.add(cur);
+        if (isApproved && !LEAVE_RECORD_OVERRIDE_EXCLUDE.has(`${overrideEmpCode}|${cur}`)) approved.add(cur);
+      }
+      // Increment by 1 day — pure UTC, no local timezone involved
+      const [y, m, d] = cur.split('-').map(Number);
+      cur = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    }
+  });
+  const next = new Set<string>();
+  prev.forEach(d => { if (!covered.has(d)) next.add(d); });
+  approved.forEach(d => next.add(d));
+  return next;
+}
+
 function parseLeaveDate(raw: string | null): string {
   if (!raw) return '';
   const s = raw.trim();
@@ -2889,43 +2941,10 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
 
     // ── Leaves (api_key=237) ──────────────────────────────────────────────────
     if (leavesResult.status === 'fulfilled') {
-      const all = leavesResult.value;
-      // Client-side safety filter: keep only leaves that overlap the selected range
-      // (server already filters, but guard against stale/unfiltered responses)
-      const inRange = all.filter(r => {
-        const fd = parseLeaveDate(r.from_date);
-        const td = parseLeaveDate(r.to_date) || fd;
-        if (!fd) return false;
-        // Overlap: leave starts before range end AND leave ends after range start
-        return fd <= toDate && td >= fromDate;
-      });
-      inRange.sort((a, b) =>
-        parseLeaveDate(a.from_date).localeCompare(parseLeaveDate(b.from_date))
-      );
-      setPmsLeaves(inRange);
-
-      // Auto-mark only APPROVED leaves on the date grid — a Cancelled or still-Pending
-      // leave record must not suppress DA for those days. Matches ClaimDetail.tsx's
-      // (HR Admin) approvedLeaveDates logic; previously this panel marked every leave
-      // regardless of status, silently zeroing DA for cancelled/pending leave dates too.
       const overrideEmpCode = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
-      const autoMarked = new Set<string>();
-      inRange.filter(r => isApprovedLeave(r.leave_status)).forEach(r => {
-        const fd = parseLeaveDate(r.from_date);
-        const td = parseLeaveDate(r.to_date) || fd;
-        if (!fd) return;
-        // Expand every calendar day in [fd, td] using UTC-only arithmetic to avoid
-        // any local timezone shift (e.g. UTC-5 would shift date by -1 day otherwise).
-        let cur = fd;
-        while (cur <= (td || fd)) {
-          if (cur >= fromDate && cur <= toDate && !LEAVE_RECORD_OVERRIDE_EXCLUDE.has(`${overrideEmpCode}|${cur}`)) autoMarked.add(cur);
-          // Increment by 1 day — pure UTC, no local timezone involved
-          const [y, m, d] = cur.split('-').map(Number);
-          const next = new Date(Date.UTC(y, m - 1, d + 1));
-          cur = next.toISOString().slice(0, 10);
-        }
-      });
-      if (autoMarked.size > 0) setLeaveDates(autoMarked);
+      const inRange = leavesInRange(leavesResult.value, fromDate, toDate);
+      setPmsLeaves(inRange);
+      setLeaveDates(prev => mergeLeaveDates(prev, inRange, fromDate, toDate, overrideEmpCode));
     } else {
       const err = leavesResult.reason as Error;
       const msg = err?.message || 'Could not fetch leave records';
@@ -4229,6 +4248,20 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
       if (wz.miscExpenses?.length) setMiscExpenses(wz.miscExpenses);
       if (wz.advances?.length) setAdvances(wz.advances);
       if (wz.employeeRemarks) setEmployeeRemarks(wz.employeeRemarks);
+
+      // The draft's saved leave days are a snapshot — re-pull leaves from PMS so a leave
+      // cancelled/rejected since the draft was saved is not still counted against DA.
+      const draftEmpCode = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+      if (draftEmpCode && wz.fromDate && wz.toDate && wz.assignments?.length) {
+        const dFrom = wz.fromDate, dTo = wz.toDate;
+        fetchEmployeeLeaves(draftEmpCode, dFrom, dTo)
+          .then(all => {
+            const inRange = leavesInRange(all, dFrom, dTo);
+            setPmsLeaves(inRange);
+            setLeaveDates(prev => mergeLeaveDates(prev, inRange, dFrom, dTo, draftEmpCode));
+          })
+          .catch(err => setLeavesError(err instanceof Error ? err.message : 'Could not refresh leave records'));
+      }
     } catch { /* corrupt draft — ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
