@@ -4,11 +4,15 @@
  * Returns all leave records for the given employee code.
  * Date-range filtering is handled client-side.
  */
-import { getKoenigToken } from '../lib/koenigAuth.js';
+import { getKoenigToken, invalidateKoenigToken } from '../lib/koenigAuth.js';
 
 export const config = { maxDuration: 10 }; // Vercel Hobby plan hard cap
 
 const BASE = 'https://api.koenig-solutions.com';
+
+const LEAVE_USER = process.env.KOENIG_LEAVE_USER || '';
+const LEAVE_PASS = process.env.KOENIG_LEAVE_PASS || '';
+const LEAVE_ROLE = 'GetIncidentData';
 
 async function getToken(userName, userPassword, userRole) {
   try {
@@ -33,38 +37,46 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Step 1 — get token (cached across warm invocations)
-    const tokenResult = await getToken(
-      process.env.KOENIG_LEAVE_USER || '',
-      process.env.KOENIG_LEAVE_PASS || '',
-      'GetIncidentData'
-    );
-    if (!tokenResult.ok) {
-      return res.status(502).json({ error: tokenResult.error });
-    }
-    const { accessToken, deviceToken } = tokenResult.content;
-
-    // Step 2 — fetch leave records (send emp_code; API returns all leaves for employee)
-    const dataUrl =
-      `${BASE}/api/Kites/Operator/common` +
-      `?apikey=237` +
-      `&accessToken=${encodeURIComponent(accessToken)}` +
-      `&deviceToken=${encodeURIComponent(deviceToken)}`;
-
     // Try numeric emp_code first (most APIs expect integer)
     const codeValue = /^\d+$/.test(empCode) ? parseInt(empCode, 10) : empCode;
 
-    const dataRes = await fetch(dataUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emp_code: codeValue }),
-    });
+    // Step 1+2 — get token (cached across warm invocations) and fetch leave records
+    // (send emp_code; API returns all leaves for employee). If Koenig rejects a token the
+    // cache still thought was fresh (another caller minted a newer session for the same
+    // account), drop the cached session and retry once with a newly minted one.
+    let data;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const tokenResult = await getToken(LEAVE_USER, LEAVE_PASS, LEAVE_ROLE);
+      if (!tokenResult.ok) {
+        return res.status(502).json({ error: tokenResult.error });
+      }
+      const { accessToken, deviceToken } = tokenResult.content;
 
-    if (!dataRes.ok) {
-      return res.status(502).json({ error: `Leave API HTTP ${dataRes.status}` });
+      const dataUrl =
+        `${BASE}/api/Kites/Operator/common` +
+        `?apikey=237` +
+        `&accessToken=${encodeURIComponent(accessToken)}` +
+        `&deviceToken=${encodeURIComponent(deviceToken)}`;
+
+      const dataRes = await fetch(dataUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emp_code: codeValue }),
+      });
+
+      if (!dataRes.ok) {
+        return res.status(502).json({ error: `Leave API HTTP ${dataRes.status}` });
+      }
+
+      data = await dataRes.json();
+
+      const denied = data.statuscode !== 200 && /forbidden|permission denied/i.test(String(data.message || ''));
+      if (denied && attempt === 0) {
+        await invalidateKoenigToken(LEAVE_USER, LEAVE_ROLE).catch(() => {});
+        continue;
+      }
+      break;
     }
-
-    const data = await dataRes.json();
 
     if (data.statuscode !== 200) {
       // A genuinely empty leave record set still comes back as statuscode 200 with
