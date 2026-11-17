@@ -502,6 +502,10 @@ function NotFound({ onBack }: { onBack: () => void }) {
 
 // ─── Main component ────────────────────────────────────────────────────────
 
+// Paid bills whose claim-detail amounts must stay frozen at what was approved and paid
+// (never the live recompute). Add a bill number only after HR confirms the paid figure.
+const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508']);
+
 const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
   const { claimId } = useParams<{ claimId: string }>();
   const navigate = useNavigate();
@@ -2781,7 +2785,17 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
   // live recompute the moment HR touches anything this visit (paidClaimEditedThisSession), so an
   // in-progress adjustment to an already-paid bill is reflected, and only fall back to frozen
   // historical figures for a claim nobody has touched.
-  const showLiveAmounts = liveDataReady && (claim?.status !== 'Paid' || paidClaimEditedThisSession);
+  //
+  // Per-bill exception: PAID_CLAIMS_FROZEN_AMOUNTS bills always show their stored, disbursed
+  // figures. TADA-2026-00508 (Shova Kant Sharma, EMP-2188): paid ₹20,762.24, but because it
+  // carries a saved misc override this page treated it as "touched" and displayed a live
+  // recompute of ₹22,650 (which re-prices the 18 Sep return day as USD 30 instead of the
+  // ₹950 that was approved and paid) — Approved/Net Payable disagreed with Payment Processing
+  // and the trainer's My Bills. 12 Sep is NOT double-counted: it is correctly excluded as
+  // already paid on TADA-2026-00507.
+  const showLiveAmounts = liveDataReady
+    && !PAID_CLAIMS_FROZEN_AMOUNTS.has(claim?.billNo ?? '')
+    && (claim?.status !== 'Paid' || paidClaimEditedThisSession);
 
   // Same frozen-rate logic as toINR above, exposed here (now that `claim` exists) for the two
   // spots that display the RATE NUMBER itself (e.g. "1 USD = ₹96"), not just a converted amount —
