@@ -1618,6 +1618,11 @@ const COUNTRY_ALIASES: Record<string, string> = {
   'new guinea': 'Papua New Guinea',
 };
 
+// Per-assignment exceptions to the Delhi-NCR "no DA" rule — HR confirmed DA is payable (India
+// rate): trainer lives in Delhi, ILT batch is in Gurgaon. Kavita Kapoor EMP-3734: assignments
+// 267511 and 269591. Keep in sync with ClaimDetail.tsx's NCR_DA_APPLICABLE_ASSIGNMENTS.
+const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
+
 // Cities in Delhi-NCR where No DA is applicable per travel policy
 const DELHI_NCR_CITIES = new Set([
   'delhi', 'new delhi', 'noida', 'greater noida', 'gurgaon', 'gurugram',
@@ -3911,7 +3916,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
       // (GGN Apartment, Koenig Apartment, Serviced Apartment, etc. — checked by name, not manual selection).
       const inDelhiNcrCity = country === 'India' && !isInternationalTravelDay && asgn != null &&
         DELHI_NCR_CITIES.has((asgn.city || '').toLowerCase().trim());
-      const isDelhiNcr = inDelhiNcrCity && !isStayingInApartment;
+      const isDelhiNcr = inDelhiNcrCity && !isStayingInApartment &&
+        !NCR_DA_APPLICABLE_ASSIGNMENTS.has(String(asgn?.assignmentId ?? ''));
 
       // Long-term stay and OB flags (new policy rules)
       const isLongTermStay = asgn?.assignmentId ? longTermAsgnIds.has(asgn.assignmentId) : false;
