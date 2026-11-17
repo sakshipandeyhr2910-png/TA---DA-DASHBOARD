@@ -419,6 +419,12 @@ const LEAVE_RECORD_OVERRIDE_EXCLUDE = new Set<string>([
   '2893|2026-10-07',
 ]);
 
+// Days of PMS leaves that were removed in PMS but are filtered out in api/leaves.js
+// (STALE_LEAVE_RECORDS). Keep in sync with that list. EMP-2188 Compensatory Off 31 Oct–4 Nov 2026.
+const STALE_LEAVE_DAYS = new Set<string>([
+  '2188|2026-10-31', '2188|2026-11-01', '2188|2026-11-02', '2188|2026-11-03', '2188|2026-11-04',
+]);
+
 function leavesInRange(all: LeaveRecord[], fromDate: string, toDate: string): LeaveRecord[] {
   // Client-side safety filter: keep only leaves that overlap the selected range
   // (server already filters, but guard against stale/unfiltered responses)
@@ -466,7 +472,11 @@ function mergeLeaveDates(
     }
   });
   const next = new Set<string>();
-  prev.forEach(d => { if (!covered.has(d)) next.add(d); });
+  // Stale PMS leaves (removed in PMS, filtered out in api/leaves.js) must also be cleared
+  // from any previously saved draft marks — they are working days, DA is claimable.
+  prev.forEach(d => {
+    if (!covered.has(d) && !STALE_LEAVE_DAYS.has(`${overrideEmpCode}|${d}`)) next.add(d);
+  });
   approved.forEach(d => next.add(d));
   return next;
 }

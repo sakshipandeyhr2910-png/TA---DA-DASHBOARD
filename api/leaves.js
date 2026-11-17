@@ -14,6 +14,12 @@ const LEAVE_USER = process.env.KOENIG_LEAVE_USER || '';
 const LEAVE_PASS = process.env.KOENIG_LEAVE_PASS || '';
 const LEAVE_ROLE = 'GetIncidentData';
 
+// EMP-2188 (Shova Sharma) Compensatory Off 31 Oct – 4 Nov 2026: removed in PMS, still
+// returned by the API; confirmed by user.
+const STALE_LEAVE_RECORDS = [
+  { empCode: '2188', from: '2026-10-31', to: '2026-11-04' },
+];
+
 async function getToken(userName, userPassword, userRole) {
   try {
     const content = await getKoenigToken(userName, userPassword, userRole);
@@ -90,6 +96,13 @@ export default async function handler(req, res) {
       try { content = JSON.parse(content); } catch { content = []; }
     }
     if (!Array.isArray(content)) content = [];
+
+    // Leaves removed in PMS that API 237 still returns as Approved (no deleted flag on the
+    // record). Matched on the exact record so no other leave for the employee is affected.
+    content = content.filter((l) => !STALE_LEAVE_RECORDS.some((s) =>
+      String(l.emp_code) === s.empCode &&
+      String(l.from_date || '').slice(0, 10) === s.from &&
+      String(l.to_date || '').slice(0, 10) === s.to));
 
     return res.status(200).json({ leaves: content });
 
