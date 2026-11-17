@@ -502,6 +502,11 @@ function NotFound({ onBack }: { onBack: () => void }) {
 
 // ─── Main component ────────────────────────────────────────────────────────
 
+// Per-assignment exceptions to the Delhi-NCR "DA not applicable" rule — HR confirmed DA is
+// payable (India rate) because the trainer lives in Delhi and the ILT batch is in Gurgaon.
+// Kavita Kapoor EMP-3734: assignments 267511 (19–23 Oct 2026) and 269591 (26–30 Oct 2026).
+const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
+
 // Paid bills whose claim-detail amounts must stay frozen at what was approved and paid
 // (never the live recompute). Add a bill number only after HR confirms the paid figure.
 const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508']);
@@ -1631,7 +1636,8 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
             }
             // Delhi-NCR rule: DA not applicable if city is within Delhi-NCR and trainer is not in an apartment
             const asgnCityNorm = (asgn.city || '').toLowerCase().trim();
-            if (DELHI_NCR_CITIES.has(asgnCityNorm) && !apartmentDates.has(iso)) {
+            if (DELHI_NCR_CITIES.has(asgnCityNorm) && !apartmentDates.has(iso) &&
+                !NCR_DA_APPLICABLE_ASSIGNMENTS.has(String(asgn.assignmentId ?? ''))) {
               autoRaw.push({
                 lineItemId: `AUTO-DA-NCR-${claimId}-${iso}`,
                 claimId: claimId ?? '', expenseType: 'DA', expenseSubType: 'N/A', date: iso,
