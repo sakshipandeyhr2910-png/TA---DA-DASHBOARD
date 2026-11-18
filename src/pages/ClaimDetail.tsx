@@ -511,6 +511,12 @@ const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
 // (never the live recompute). Add a bill number only after HR confirms the paid figure.
 const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508']);
 
+// Paid bills that must show the LIVE recompute instead of the stored (frozen) totals because the
+// stored figures are stale. TADA-2026-00603 (Shova Kant Sharma, EMP-2188): DA eligibility for the
+// Saudi Arabia assignment was corrected (USD 30/day) after payment, but the stored total stayed
+// at Rs 8,457.
+const PAID_CLAIMS_LIVE_AMOUNTS = new Set<string>(['TADA-2026-00603']);
+
 // Per-bill DA days that must show the India rate (HR confirmed) instead of the live-priced
 // destination-country rate. TADA-2026-00508 (Shova Kant Sharma, EMP-2188): 18 Sep 2026 return
 // day was still displayed as USD 30; approved and paid at India ₹950.
@@ -2824,7 +2830,7 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
   // already paid on TADA-2026-00507.
   const showLiveAmounts = liveDataReady
     && !PAID_CLAIMS_FROZEN_AMOUNTS.has(claim?.billNo ?? '')
-    && (claim?.status !== 'Paid' || paidClaimEditedThisSession);
+    && (claim?.status !== 'Paid' || paidClaimEditedThisSession || PAID_CLAIMS_LIVE_AMOUNTS.has(claim?.billNo ?? ''));
 
   // Same frozen-rate logic as toINR above, exposed here (now that `claim` exists) for the two
   // spots that display the RATE NUMBER itself (e.g. "1 USD = ₹96"), not just a converted amount —
