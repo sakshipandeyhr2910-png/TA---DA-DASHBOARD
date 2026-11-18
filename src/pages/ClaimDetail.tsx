@@ -511,6 +511,13 @@ const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
 // (never the live recompute). Add a bill number only after HR confirms the paid figure.
 const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508']);
 
+// Per-bill DA days that must show the India rate (HR confirmed) instead of the live-priced
+// destination-country rate. TADA-2026-00508 (Shova Kant Sharma, EMP-2188): 18 Sep 2026 return
+// day was still displayed as USD 30; approved and paid at India ₹950.
+const PAID_CLAIM_DA_DAY_INDIA: Record<string, string[]> = {
+  'TADA-2026-00508': ['2026-09-18'],
+};
+
 const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
   const { claimId } = useParams<{ claimId: string }>();
   const navigate = useNavigate();
@@ -2270,6 +2277,22 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
               // whose assignment ends just before the gap). Looking backward would duplicate
               // the gap into both bills and cause double-payment.
             });
+        }
+
+        // Per-bill DA day overrides (see PAID_CLAIM_DA_DAY_INDIA): HR confirmed the India rate
+        // applies, so the live-priced destination-country row must not show for that day.
+        const indiaDays = PAID_CLAIM_DA_DAY_INDIA[String(claim?.billNo ?? '')];
+        if (indiaDays) {
+          const { rate: indiaRate, currency: indiaCurrency } = getHrDaInfo('India');
+          autoRaw.forEach((li, i) => {
+            if (li.expenseType !== 'DA' || !indiaDays.includes(String(li.date))) return;
+            autoRaw[i] = {
+              ...li, expenseSubType: 'India',
+              description: 'Daily Allowance — India (return travel day, HR confirmed)',
+              claimedAmount: indiaRate, policyLimit: indiaRate, eligibleAmount: indiaRate,
+              currency: indiaCurrency,
+            };
+          });
         }
 
         if (autoRaw.length > 0) effectiveRaw = autoRaw;
