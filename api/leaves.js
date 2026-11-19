@@ -18,6 +18,10 @@ const LEAVE_ROLE = 'GetIncidentData';
 // returned by the API; confirmed by user.
 const STALE_LEAVE_RECORDS = [
   { empCode: '2188', from: '2026-10-31', to: '2026-11-04' },
+  // EMP-2934 (Anirudh Sharma) leaves 20–22 Sep and 24 Sep 2026: removed in PMS, still returned
+  // by the API; confirmed by user.
+  { empCode: '2934', from: '2026-09-20', to: '2026-09-22' },
+  { empCode: '2934', from: '2026-09-24', to: '2026-09-24' },
 ];
 
 async function getToken(userName, userPassword, userRole) {
@@ -101,8 +105,8 @@ export default async function handler(req, res) {
     // record). Matched on the exact record so no other leave for the employee is affected.
     content = content.filter((l) => !STALE_LEAVE_RECORDS.some((s) =>
       String(l.emp_code) === s.empCode &&
-      String(l.from_date || '').slice(0, 10) === s.from &&
-      String(l.to_date || '').slice(0, 10) === s.to));
+      String(l.from_date || '').slice(0, 10) >= s.from &&
+      String(l.to_date || l.from_date || '').slice(0, 10) <= s.to));
 
     return res.status(200).json({ leaves: content });
 

@@ -423,6 +423,8 @@ const LEAVE_RECORD_OVERRIDE_EXCLUDE = new Set<string>([
 // (STALE_LEAVE_RECORDS). Keep in sync with that list. EMP-2188 Compensatory Off 31 Oct–4 Nov 2026.
 const STALE_LEAVE_DAYS = new Set<string>([
   '2188|2026-10-31', '2188|2026-11-01', '2188|2026-11-02', '2188|2026-11-03', '2188|2026-11-04',
+  // EMP-2934 Anirudh Sharma leaves 20–22 Sep and 24 Sep 2026 (removed in PMS).
+  '2934|2026-09-20', '2934|2026-09-21', '2934|2026-09-22', '2934|2026-09-24',
 ]);
 
 function leavesInRange(all: LeaveRecord[], fromDate: string, toDate: string): LeaveRecord[] {
