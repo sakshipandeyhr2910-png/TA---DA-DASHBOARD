@@ -3506,17 +3506,31 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         const cc = a.city ? inferCountryFromCity(a.city) : '';
         return (a.country === 'India' && cc && cc !== 'India') ? cc : (a.country || cc || '');
       };
-      const sortedForGap = [...assignments]
+      // Also consider the trainer's neighbouring assignments (±30 days) so the gap is filled
+      // when the two assignments are billed SEPARATELY (Saquib Manzoor EMP-2464: Dubai 236806
+      // ends 23 Oct, Abu Dhabi 271969 starts 28 Oct — 25/26 Oct were in neither bill). The gap
+      // belongs to the EARLIER assignment's bill only (asgnA must be in this bill), so the same
+      // days are never claimable in both bills.
+      const billAsgnIds = new Set(assignments.map(a => String(a.assignmentId || a.id)));
+      const gapPool = [...assignments];
+      allNearbyAssignments.forEach(n => {
+        if (!billAsgnIds.has(String(n.assignmentId || n.id))) gapPool.push(n);
+      });
+      const sortedForGap = gapPool
         .filter(a => a.deliveryMode !== 'Online' && a.batchType !== 'ILO' && a.startDate && a.endDate)
         .sort((a, b) => (a.startDate! < b.startDate! ? -1 : 1));
       for (let i = 0; i < sortedForGap.length - 1; i++) {
         const asgnA = sortedForGap[i];
         const asgnB = sortedForGap[i + 1];
+        if (!billAsgnIds.has(String(asgnA.assignmentId || asgnA.id))) continue; // earlier asgn must be in this bill
+        const bInBill = billAsgnIds.has(String(asgnB.assignmentId || asgnB.id));
         const destA = getAsgnDestC(asgnA);
         const destB = getAsgnDestC(asgnB);
         if (!destA || !destB) continue;
         const gapStart = addDays(asgnA.endDate!, 1);
-        const gapEnd   = addDays(asgnB.startDate!, -1);
+        // If asgnB is billed separately, its own bill starts at its departure day (start − 1),
+        // so stop the gap one day earlier to avoid claiming that day twice.
+        const gapEnd   = addDays(asgnB.startDate!, bInBill ? -1 : -2);
         if (gapStart > gapEnd) continue;
         const gapDays = Math.round((new Date(gapEnd).getTime() - new Date(gapStart).getTime()) / 86400000) + 1;
         if (gapDays > 7) continue;
@@ -4111,7 +4125,7 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
 
       return { iso, day: dayName(iso), country, assignmentId: asgnId, courseName: asgnCourse, status, statusClass, rate, currency, amount, remarks };
     });
-  }, [fetched, fromDate, toDate, today, assignments, primaryCountry, leaveDates, pmsFlights, pmsAccom, lodgingEntries]);
+  }, [fetched, fromDate, toDate, today, assignments, allNearbyAssignments, primaryCountry, leaveDates, pmsFlights, pmsAccom, lodgingEntries]);
 
   // Live FX rates (fetched on mount from /api/fx-rates); falls back to fxRates state
   const FX_TO_INR = fxRates;
