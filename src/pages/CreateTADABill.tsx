@@ -1671,8 +1671,8 @@ const COUNTRY_ALIASES: Record<string, string> = {
 
 // Per-assignment exceptions to the Delhi-NCR "no DA" rule — HR confirmed DA is payable (India
 // rate): trainer lives in Delhi, ILT batch is in Gurgaon. Kavita Kapoor EMP-3734: assignments
-// 267511 and 269591. Keep in sync with ClaimDetail.tsx's NCR_DA_APPLICABLE_ASSIGNMENTS.
-const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
+// 267511 and 269591; Nirbhai Singh Chauhan EMP-2114: 270064. Keep in sync with ClaimDetail.tsx's NCR_DA_APPLICABLE_ASSIGNMENTS.
+const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591', '270064']);
 
 // Cities in Delhi-NCR where No DA is applicable per travel policy
 const DELHI_NCR_CITIES = new Set([

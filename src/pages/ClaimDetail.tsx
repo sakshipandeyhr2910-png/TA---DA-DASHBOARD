@@ -505,7 +505,8 @@ function NotFound({ onBack }: { onBack: () => void }) {
 // Per-assignment exceptions to the Delhi-NCR "DA not applicable" rule — HR confirmed DA is
 // payable (India rate) because the trainer lives in Delhi and the ILT batch is in Gurgaon.
 // Kavita Kapoor EMP-3734: assignments 267511 (19–23 Oct 2026) and 269591 (26–30 Oct 2026).
-const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
+// Nirbhai Singh Chauhan EMP-2114: assignment 270064 (12–16 Oct 2026).
+const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591', '270064']);
 const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
 
 // Paid bills whose claim-detail amounts must stay frozen at what was approved and paid
