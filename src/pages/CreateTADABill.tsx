@@ -1206,6 +1206,21 @@ const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
 // even though the trainer's final same-day leg lands in India (see sameDayIndiaReturn below).
 const SAME_DAY_RETURN_DEST_DA_EXCEPTIONS = new Set<string>(['307|2026-11-01']);
 
+// "<empCode>|<ISO date>" — transit days between two foreign batches that no assignment's
+// departure/return logic covers. HR confirmed the DA country and which assignment's bill owns the
+// day. Anirudh Sharma EMP-2934, 19 Sep 2026: Johannesburg batch 267139 ended 18 Sep; he flew
+// Johannesburg→Cairo (lands 07:10) →Zurich (lands 13:55) on 19 Sep, then →Amsterdam 20 Sep.
+// HR: Switzerland (Zurich) DA, claimable in 267139's bill.
+const DAY_DA_OVERRIDES: Record<string, { country: string; assignmentId: string }> = {
+  '2934|2026-09-19': { country: 'Switzerland', assignmentId: '267139' },
+};
+// "<empCode>|<ISO date>" → bill number that already paid that day's DA, so a follow-up bill on the
+// same assignment (the wizard lists EVERY assignment day) cannot claim it twice.
+// Anirudh Sharma EMP-2934, assignment 267139: 14–18 Sep paid in TADA-2026-00484.
+const ALREADY_PAID_DA_DAYS: Record<string, string> = Object.fromEntries(
+  ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18'].map(d => [`2934|${d}`, 'TADA-2026-00484']),
+);
+
 function mapRawToAssignment(r: RawTrainerAssignment, fallbackFromDate = '', fallbackToDate = ''): Assignment {
   // ── Batch type & delivery mode ──────────────────────────────────────────────
   // apikey=258 (primary) returns "batch_delivery_mode"; apikey=208 (fallback) returns "Batch_type"
@@ -3587,6 +3602,15 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
       }
     }
 
+    // HR-confirmed transit days (DAY_DA_OVERRIDES) belong to a specific assignment's bill.
+    {
+      const empKeyForDays = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+      Object.entries(DAY_DA_OVERRIDES).forEach(([k, v]) => {
+        const [emp, day] = k.split('|');
+        if (emp === empKeyForDays && assignments.some(a => String(a.assignmentId) === v.assignmentId)) dateSet.add(day);
+      });
+    }
+
     const sortedDates = Array.from(dateSet).sort();
 
     // ── Build apartment-coverage date set (Step 6 → Step 4) ──────────────────
@@ -3699,7 +3723,11 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         ? (gapDateMap.get(iso) ?? null)
         : null;
 
-      const asgn = overnightDepArrAsgn ?? coreAsgn ?? depAsgn ?? retAsgn ?? interimAsgn ?? overnightArrAsgn ?? gapAsgn ?? null;
+      const dayEmpKey = (currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+      const dayOverride = DAY_DA_OVERRIDES[`${dayEmpKey}|${iso}`];
+      const alreadyPaidIn = ALREADY_PAID_DA_DAYS[`${dayEmpKey}|${iso}`];
+      const asgn = (dayOverride ? assignments.find(a => String(a.assignmentId) === dayOverride.assignmentId) : null)
+        ?? overnightDepArrAsgn ?? coreAsgn ?? depAsgn ?? retAsgn ?? interimAsgn ?? overnightArrAsgn ?? gapAsgn ?? null;
       const isDeparture        = !!depAsgn;
       const isReturn           = !!retAsgn;
       const isInterim          = !!interimAsgn;
@@ -3927,6 +3955,7 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         }
       }
 
+      if (dayOverride && asgn) country = dayOverride.country;
       const asgnId     = asgn?.assignmentId || '';
       const asgnCourse = asgn?.courseName   || '';
       const daInfo     = getDaInfo(country, layoverInfo ? undefined : isInternationalTravelDay ? undefined : asgn?.city);
@@ -4009,6 +4038,16 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         statusClass = 'bg-red-100 text-red-600 border border-red-200';
         amount      = 0;
         remarks     = `${asgnTag} — future date`;
+      } else if (alreadyPaidIn) {
+        status      = `Already Claimed (${alreadyPaidIn})`;
+        statusClass = 'bg-gray-100 text-gray-500 border border-gray-300';
+        amount      = 0;
+        remarks     = `${asgnTag} — DA for this day was already paid in ${alreadyPaidIn}`;
+      } else if (dayOverride) {
+        status      = 'Allowed (Transit Day)';
+        statusClass = 'bg-blue-100 text-blue-700';
+        amount      = rate;
+        remarks     = `${asgnTag} — transit day between batches; ${dayOverride.country} DA applied (HR approved)`;
       } else if (isDeparture && !depEligible) {
         // Departure after 17:00 → travel day DA not applicable per policy
         status      = 'Not Eligible — Departure After 17:00';
