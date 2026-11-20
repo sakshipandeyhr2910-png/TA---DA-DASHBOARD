@@ -1202,6 +1202,10 @@ function inferCountryFromCity(city: string): string {
 const ASSIGNMENT_END_DATE_CLIP: Record<string, string> = { '269924': '2026-11-20' };
 const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
 
+// "<empCode>|<ISO return day>" — return days where HR confirmed destination-country DA applies
+// even though the trainer's final same-day leg lands in India (see sameDayIndiaReturn below).
+const SAME_DAY_RETURN_DEST_DA_EXCEPTIONS = new Set<string>(['307|2026-11-01']);
+
 function mapRawToAssignment(r: RawTrainerAssignment, fallbackFromDate = '', fallbackToDate = ''): Assignment {
   // ── Batch type & delivery mode ──────────────────────────────────────────────
   // apikey=258 (primary) returns "batch_delivery_mode"; apikey=208 (fallback) returns "Batch_type"
@@ -3840,7 +3844,12 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
           const finalDepDate = returnFlight2 ? parseDT(returnFlight2.departure_date) : '';
           const sameDayIndiaReturn = finalToCountry === 'India' && finalArrDate === finalDepDate;
 
-          if (sameDayIndiaReturn) {
+          // Per-day exception: HR confirmed destination-country DA on this return day even though
+          // the final same-day leg lands in India. Sachin Chauhan EMP-307, 1 Nov 2026: Singapore→
+          // Mumbai dep 09:40, Mumbai→Chandigarh arr 19:10 (base is Shimla) — USD 50 Singapore DA.
+          const sameDayReturnDestDAException =
+            SAME_DAY_RETURN_DEST_DA_EXCEPTIONS.has(`${(currentUser?.trainerId ?? '').replace(/^EMP-/i, '').trim()}|${iso}`);
+          if (sameDayIndiaReturn && !sameDayReturnDestDAException) {
             // The FINAL leg's arrival at the trainer's actual base is what decides the country,
             // not how early they left the destination country. Bug fixed 2026-08-31: Vaibhav
             // Doshi EMP-2624, TADA-2026-00138 — Singapore->Mumbai (dep 08:45, >=04:00) then
@@ -4059,6 +4068,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
           ? `${asgnTag} — return day; ${layoverInfo.country} layover ${layoverInfo.layoverHours.toFixed(1)} hrs (≥4 hrs); ${layoverInfo.country} DA applied${arrNote}`
           : isInternationalTravelDay
             ? `${asgnTag} — return from ${destCountry}; ${retDepNote}; departed before 04:00 local (<4 hrs in ${destCountry}), India DA applied${arrNote}`
+            : destCountry !== 'India' && country === 'India'
+              ? `${asgnTag} — return from ${destCountry}; ${retDepNote}; final same-day leg lands in India${arrNote}, India DA applied`
             : destCountry !== 'India'
               ? `${asgnTag} — return from ${destCountry}; ${retDepNote}; 4+ hrs in ${destCountry} (departed at/after 04:00 local), ${destCountry} DA applied${arrNote}`
               : `${asgnTag} — return day${arrNote}`;
@@ -4139,7 +4150,7 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
 
       return { iso, day: dayName(iso), country, assignmentId: asgnId, courseName: asgnCourse, status, statusClass, rate, currency, amount, remarks };
     });
-  }, [fetched, fromDate, toDate, today, assignments, allNearbyAssignments, primaryCountry, leaveDates, pmsFlights, pmsAccom, lodgingEntries]);
+  }, [fetched, fromDate, toDate, today, assignments, allNearbyAssignments, primaryCountry, leaveDates, pmsFlights, pmsAccom, lodgingEntries, currentUser?.trainerId]);
 
   // Live FX rates (fetched on mount from /api/fx-rates); falls back to fxRates state
   const FX_TO_INR = fxRates;

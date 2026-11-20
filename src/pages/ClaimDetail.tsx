@@ -2608,7 +2608,10 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
             // means the day is his return-to-base day and should be India DA. Per explicit
             // instruction: once the final same-day leg lands at the trainer's base in India
             // after 12:00, that day is always India DA — no departure-time exception.
-            effectiveCountry = 'India';
+            // Per-day HR exception (mirrors SAME_DAY_RETURN_DEST_DA_EXCEPTIONS in
+            // CreateTADABill.tsx): Sachin Chauhan EMP-307, 1 Nov 2026 keeps Singapore DA.
+            const exceptionEmp = String((claim as unknown as { trainerId?: string })?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+            if (!['307|2026-11-01'].includes(`${exceptionEmp}|${date}`)) effectiveCountry = 'India';
           } else if (retToCountry && retToCountry !== 'India' && retToCountry !== destCountry) {
             // The flight is heading to a DIFFERENT international destination, not returning
             // home to India — this day genuinely belongs to that new assignment, not this
