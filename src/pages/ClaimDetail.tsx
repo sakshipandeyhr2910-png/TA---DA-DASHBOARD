@@ -2375,6 +2375,15 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
         li.lineItemId?.startsWith('AUTO-DA-OB-')
       ) return li;
 
+      // HR-confirmed per-day DA (mirrors DAY_DA_OVERRIDES in CreateTADABill.tsx): these transit
+      // days were set explicitly, so the flight-based re-derivation below must not touch them.
+      // Anirudh Sharma EMP-2934 19 Sep 2026; Abhishek Pratap EMP-2893 2/3/15/16 Oct 2026.
+      {
+        const hrFixedEmp = String((claim as unknown as { trainerId?: string })?.trainerId ?? '').replace(/^EMP-/i, '').trim();
+        if (li.expenseType === 'DA' && ['2934|2026-09-19', '2893|2026-10-02', '2893|2026-10-03', '2893|2026-10-15', '2893|2026-10-16']
+          .includes(`${hrFixedEmp}|${String(li.date ?? '').slice(0, 10)}`)) return li;
+      }
+
       // Find the assignment this DA day belongs to — check three cases:
       // 1. Date is within assignment range (regular on-site day)
       // 2. Date is the departure travel day (day before startDate — trainer flies to destination)

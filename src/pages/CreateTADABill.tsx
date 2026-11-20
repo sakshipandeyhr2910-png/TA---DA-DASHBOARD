@@ -1211,8 +1211,17 @@ const SAME_DAY_RETURN_DEST_DA_EXCEPTIONS = new Set<string>(['307|2026-11-01']);
 // day. Anirudh Sharma EMP-2934, 19 Sep 2026: Johannesburg batch 267139 ended 18 Sep; he flew
 // Johannesburg→Cairo (lands 07:10) →Zurich (lands 13:55) on 19 Sep, then →Amsterdam 20 Sep.
 // HR: Switzerland (Zurich) DA, claimable in 267139's bill.
-const DAY_DA_OVERRIDES: Record<string, { country: string; assignmentId: string }> = {
-  '2934|2026-09-19': { country: 'Switzerland', assignmentId: '267139' },
+const DAY_DA_OVERRIDES: Record<string, { country: string; assignmentId: string; note: string }> = {
+  '2934|2026-09-19': { country: 'Switzerland', assignmentId: '267139', note: 'transit day between batches' },
+  // Abhishek Pratap EMP-2893, Kingston (Jamaica) assignments 269494 (5–9 Oct) and 269495 (12–14 Oct).
+  // Outbound Ahmedabad→Delhi→London 2 Oct (lands 19:00), London→Kingston 3 Oct (13:00→17:00);
+  // return Kingston→London 14 Oct 20:00 (lands 15 Oct 11:05), London→Delhi 16 Oct 13:15. The
+  // overnight London stays are not covered by the same-day layover rule, so HR set each day:
+  // 2 Oct India, 3 Oct UK (long London layover), 4 Oct onwards Jamaica (automatic), 15–16 Oct UK.
+  '2893|2026-10-02': { country: 'India', assignmentId: '269494', note: 'departure day from India' },
+  '2893|2026-10-03': { country: 'UK', assignmentId: '269494', note: 'London layover (18 hrs) before the Kingston flight' },
+  '2893|2026-10-15': { country: 'UK', assignmentId: '269495', note: 'in London on the way back (arrived 11:05, onward flight next day)' },
+  '2893|2026-10-16': { country: 'UK', assignmentId: '269495', note: 'in London until the 13:15 flight to Delhi' },
 };
 // "<empCode>|<ISO date>" → bill number that already paid that day's DA, so a follow-up bill on the
 // same assignment (the wizard lists EVERY assignment day) cannot claim it twice.
@@ -4063,7 +4072,7 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         status      = 'Allowed (Transit Day)';
         statusClass = 'bg-blue-100 text-blue-700';
         amount      = rate;
-        remarks     = `${asgnTag} — transit day between batches; ${dayOverride.country} DA applied (HR approved)`;
+        remarks     = `${asgnTag} — ${dayOverride.note}; ${dayOverride.country} DA applied (HR approved)`;
       } else if (isDeparture && !depEligible) {
         // Departure after 17:00 → travel day DA not applicable per policy
         status      = 'Not Eligible — Departure After 17:00';
