@@ -1193,6 +1193,15 @@ function inferCountryFromCity(city: string): string {
 }
 
 
+// PMS assignment 269924 (Karanveer Singh EMP-4825, Indore FMAT) carries two separate blocks of
+// training dates on one record: 12 Oct – 20 Nov 2026 and 7 Dec 2026 – 15 Jan 2027 (trainer returns
+// home in between, then travels again). The whole record spans 96 days, which trips the
+// ≥30-day long-term-stay "no DA" rule. HR confirmed the trainer claims the first block now, so
+// the record is clipped to end on 20 Nov 2026 and exempted from the long-term rule. The second
+// block must be billed separately after it happens — remove this entry then.
+const ASSIGNMENT_END_DATE_CLIP: Record<string, string> = { '269924': '2026-11-20' };
+const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
+
 function mapRawToAssignment(r: RawTrainerAssignment, fallbackFromDate = '', fallbackToDate = ''): Assignment {
   // ── Batch type & delivery mode ──────────────────────────────────────────────
   // apikey=258 (primary) returns "batch_delivery_mode"; apikey=208 (fallback) returns "Batch_type"
@@ -1267,6 +1276,11 @@ function mapRawToAssignment(r: RawTrainerAssignment, fallbackFromDate = '', fall
   // Priority 3: fall back to selected date range (shown as "inferred" in UI)
   if (!startDate && fallbackFromDate) startDate = fallbackFromDate;
   if (!endDate   && fallbackToDate)   endDate   = fallbackToDate;
+
+  // Per-assignment end-date clip (see ASSIGNMENT_END_DATE_CLIP) — PMS stretches these records
+  // over a second, separate block of training dates.
+  const clipEnd = ASSIGNMENT_END_DATE_CLIP[r.AssignmentId != null ? String(r.AssignmentId) : ''];
+  if (clipEnd && endDate && endDate > clipEnd) endDate = clipEnd;
 
   // trainingDates = raw API string if present; null = inferred (UI shows amber label)
   const trainingDates: string | null = rawTrainingDates || null;
@@ -3190,7 +3204,7 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
 
       // Long-term stay: ≥ 30 days duration → mark as non-applicable
       const spanDays = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
-      if (spanDays >= 30 && a.assignmentId) longTermAsgnIds.add(a.assignmentId);
+      if (spanDays >= 30 && a.assignmentId && !LONG_TERM_EXEMPT_ASSIGNMENTS.has(a.assignmentId)) longTermAsgnIds.add(a.assignmentId);
 
       // OB check: batchType or batchCategory contains OB / On-Bench
       const bt = (a.batchType || '').toUpperCase();
