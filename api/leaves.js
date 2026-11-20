@@ -22,6 +22,12 @@ const STALE_LEAVE_RECORDS = [
   // by the API; confirmed by user.
   { empCode: '2934', from: '2026-09-20', to: '2026-09-22' },
   { empCode: '2934', from: '2026-09-24', to: '2026-09-24' },
+  // EMP-2116 (Prabhat Singh) Sick Leave 15–30 Aug 2026: removed in PMS, still returned by the API;
+  // confirmed by user. His real leave is 22–25 Aug only, so this one must match EXACTLY — the
+  // range-contained match would also drop the genuine 22–25 Aug record.
+  { empCode: '2116', from: '2026-08-15', to: '2026-08-30', exact: true },
+  // EMP-2116 Sick Leave 3–9 Aug 2026: also not in RMS; removal confirmed by user.
+  { empCode: '2116', from: '2026-08-03', to: '2026-08-09', exact: true },
 ];
 
 async function getToken(userName, userPassword, userRole) {
@@ -105,8 +111,11 @@ export default async function handler(req, res) {
     // record). Matched on the exact record so no other leave for the employee is affected.
     content = content.filter((l) => !STALE_LEAVE_RECORDS.some((s) =>
       String(l.emp_code) === s.empCode &&
-      String(l.from_date || '').slice(0, 10) >= s.from &&
-      String(l.to_date || l.from_date || '').slice(0, 10) <= s.to));
+      (s.exact
+        ? String(l.from_date || '').slice(0, 10) === s.from &&
+          String(l.to_date || l.from_date || '').slice(0, 10) === s.to
+        : String(l.from_date || '').slice(0, 10) >= s.from &&
+          String(l.to_date || l.from_date || '').slice(0, 10) <= s.to)));
 
     return res.status(200).json({ leaves: content });
 
