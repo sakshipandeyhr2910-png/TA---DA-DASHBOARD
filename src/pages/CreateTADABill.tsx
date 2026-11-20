@@ -3236,9 +3236,23 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
       // Window widened to -6 days (was -2) to catch trainers who arrive several days early
       // and stay locally before the batch begins (e.g. multi-day domestic pre-batch stay,
       // or a connecting return-from-a-previous-trip leg landing a few days before start).
+      // An INBOUND leg can never depart FROM the assignment's own destination country on/after the
+      // start day, nor land back in India after the start day — those are RETURN legs. Without
+      // this, a short batch right after another one in the same country (Anirudh Sharma EMP-2934,
+      // assignment 270159: 1-day Brussels batch 26 Oct, return Brussel→Helsinki→Delhi 27 Oct) picked
+      // the return flight as the "outbound", moved the departure day to 27 Oct and dropped the
+      // actual training day (26 Oct) from the DA table entirely.
+      const asgnDestForInbound = (a.country && a.country !== 'India')
+        ? a.country
+        : (a.city ? inferCountryFromCity(a.city) : '');
       const outboundCandidates = activeFlights.filter(f => {
         const fd = parseDT(f.departure_date);
-        return fd ? fd >= addDays(start, -6) && fd <= addDays(start, 1) : false;
+        if (!fd || !(fd >= addDays(start, -6) && fd <= addDays(start, 1))) return false;
+        if (asgnDestForInbound && asgnDestForInbound !== 'India') {
+          if (fd >= start && inferCountryFromCity((f.from_city || '').trim()) === asgnDestForInbound) return false;
+          if (fd > start && inferCountryFromCity((f.to_city || '').trim()) === 'India') return false;
+        }
+        return true;
       });
       // Priority 1: the LATEST candidate whose to_city exactly matches the assignment's
       // training city — this is the actual final leg that brought the trainer to the
@@ -3505,6 +3519,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
         // Include ALL days from departure to return — covers departure day,
         // pre-batch transit days, core assignment days, post-batch holding days, and return day.
         isoRange(dep, ret).forEach(d => dateSet.add(d));
+        // The assignment's own training days must always be listed, whatever the flight data says.
+        if (start <= end) isoRange(start, end).forEach(d => dateSet.add(d));
         // For overnight return flights, the arrival date (next day) must also be shown as India DA
         const arrDay = flightRetArrDay.get(end);
         if (arrDay) dateSet.add(arrDay);
