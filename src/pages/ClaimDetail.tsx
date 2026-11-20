@@ -506,6 +506,7 @@ function NotFound({ onBack }: { onBack: () => void }) {
 // payable (India rate) because the trainer lives in Delhi and the ILT batch is in Gurgaon.
 // Kavita Kapoor EMP-3734: assignments 267511 (19–23 Oct 2026) and 269591 (26–30 Oct 2026).
 const NCR_DA_APPLICABLE_ASSIGNMENTS = new Set<string>(['267511', '269591']);
+const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
 
 // Paid bills whose claim-detail amounts must stay frozen at what was approved and paid
 // (never the live recompute). Add a bill number only after HR confirms the paid figure.
@@ -1513,7 +1514,10 @@ const ClaimDetail: React.FC<ClaimDetailProps> = ({ currentUser }) => {
     enrichedSummaryAssignments.forEach(a => {
       if (!a.startDate || !a.endDate || !a.assignmentId) return;
       const span = Math.round((new Date(a.endDate).getTime() - new Date(a.startDate).getTime()) / 86400000) + 1;
-      if (span >= 30) longTermAsgnIds.add(a.assignmentId);
+      // 269924 (Karanveer Singh EMP-4825): PMS record spans two blocks (12 Oct–20 Nov and
+      // 7 Dec–15 Jan); HR confirmed the first block is claimable — exempt from the 30-day rule.
+      // Keep in sync with LONG_TERM_EXEMPT_ASSIGNMENTS in CreateTADABill.tsx.
+      if (span >= 30 && !LONG_TERM_EXEMPT_ASSIGNMENTS.has(String(a.assignmentId))) longTermAsgnIds.add(a.assignmentId);
       const bt = (a.batchType || '').toUpperCase();
       const bc = ((a as unknown as { batchCategory?: string }).batchCategory || '').toUpperCase();
       if (bt === 'OB' || bt.includes('BENCH') || bc.includes('OB') || bc.includes('BENCH')) obAsgnIds.add(a.assignmentId);
