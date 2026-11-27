@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { UserCheck, ShieldCheck, Banknote, Crown, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff, Lock, Mail, RefreshCw } from 'lucide-react';
 import type { User, UserRole, PmsEmployeeDetails } from '../types';
 import { mockUsers } from '../data/mockUsers';
+import SubmissionsClosedBanner from '../components/SubmissionsClosedBanner';
 
 // ── PMS API — via server-side endpoint (credentials never in browser) ──────────
 
@@ -633,6 +634,8 @@ const LoginRoleSelector: React.FC<Props> = ({ onLogin, showTrainerCardDirectly, 
         />
         <p className="text-sm text-gray-500">Enterprise Training &amp; Learning</p>
       </div>
+
+      <SubmissionsClosedBanner className="w-full max-w-3xl mb-4" />
 
       {/* Card */}
       <div className="w-full max-w-3xl bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">

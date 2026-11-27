@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { User } from '../types';
 import { SUBMISSIONS_CLOSED } from '../config';
+import SubmissionsClosedBanner from '../components/SubmissionsClosedBanner';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -5147,6 +5148,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
             </div>
           </div>
         )}
+
+        <SubmissionsClosedBanner />
 
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
