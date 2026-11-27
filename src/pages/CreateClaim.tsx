@@ -8,6 +8,7 @@ import {
 import type { User } from '../types';
 import { saveClaim, clearDraftWizard } from '../services/storageService';
 import { formatDate, formatINR } from '../services/calculationEngine';
+import { SUBMISSIONS_CLOSED } from '../config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1998,6 +1999,7 @@ export default function CreateClaim({ currentUser }: { currentUser?: User }) {
   const totals = useMemo(() => calcTotals(d), [d]);
 
   const handleSubmit = async () => {
+    if (SUBMISSIONS_CLOSED) { alert('New TA/DA claim submissions are closed on this dashboard.'); return; }
     setSubmitting(true);
     await new Promise(r => setTimeout(r, 1200));
     saveClaim({

@@ -76,6 +76,12 @@ If a field is not legible or absent, return empty string for it.`;
 // Shared helper: call Koenig RMS's Upsert TA Bill endpoint (api_id=354). Used both by the
 // create-tabill route (trainer submit) and by the claims DELETE handler below, which now voids
 // the RMS record instead of just refusing to delete locally.
+// Submission freeze (2026-11-27): no NEW claims may be submitted from this dashboard. Existing
+// claims stay fully editable (HR review, approve, pay, reopen). Set CLAIM_SUBMISSIONS_OPEN=true in
+// the Vercel env to reopen submissions.
+const SUBMISSIONS_CLOSED = process.env.CLAIM_SUBMISSIONS_OPEN !== 'true';
+const SUBMISSIONS_CLOSED_MSG = 'New TA/DA claim submissions are closed on this dashboard.';
+
 async function upsertRmsTABill({ TABillID, EmpID, From, To, Advance, TADAAmt, EmpRemark, IsSubmitted, scids }) {
   const tokUser = process.env.KOENIG_TABILL_USER || 'TaDaPanel';
   const tokPass = process.env.KOENIG_TABILL_PASS || 'TaDaPanel@123';
@@ -194,6 +200,11 @@ export default async function handler(req, res) {
     } = req.body || {};
     if (!EmpID || !From || !To) {
       return res.status(400).json({ error: 'EmpID, From, and To are required' });
+    }
+    // Submission freeze: creating a NEW RMS TA Bill (no TABillID) is blocked; updating an
+    // existing one is still allowed.
+    if (SUBMISSIONS_CLOSED && TABillID == null) {
+      return res.status(403).json({ error: SUBMISSIONS_CLOSED_MSG });
     }
     try {
       const tokUser     = process.env.KOENIG_TABILL_USER || 'TaDaPanel';
@@ -342,6 +353,17 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const claim = req.body;
       if (!claim?.claimId) return res.status(400).json({ error: 'Missing claimId' });
+      // Submission freeze: a non-Draft save is only allowed for a claim that was already
+      // submitted (row exists and is not a Draft). Brand-new claims, and drafts being
+      // converted into submissions, are rejected.
+      if (SUBMISSIONS_CLOSED && claim.status !== 'Draft') {
+        let alreadySubmitted = false;
+        try {
+          const ex = await db.execute({ sql: 'SELECT status FROM claims WHERE id = ?', args: [claim.claimId] });
+          alreadySubmitted = ex.rows.length > 0 && ex.rows[0].status !== 'Draft';
+        } catch { /* treat lookup failure as not-submitted: fail closed */ }
+        if (!alreadySubmitted) return res.status(403).json({ error: SUBMISSIONS_CLOSED_MSG });
+      }
       // rmsTABillId is set once (async, fire-and-forget) shortly AFTER the initial claim save
       // completes. If some other action re-saves the claim from a stale in-memory copy fetched
       // before that update landed, a blind overwrite here would silently erase it. Preserve the

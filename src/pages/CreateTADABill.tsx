@@ -9,6 +9,7 @@ import {
   Edit3, ChevronDown, ChevronUp, Plane, ExternalLink, DollarSign, MessageSquare,
 } from 'lucide-react';
 import type { User } from '../types';
+import { SUBMISSIONS_CLOSED } from '../config';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -4470,6 +4471,8 @@ export default function CreateTADABill({ currentUser }: { currentUser?: User }) 
   }, [fromDate, toDate, assignments, leaveDates, travelBills, lodgingEntries, miscExpenses, advances, employeeRemarks, currentUser, isProxyMode]);
 
   async function handleSubmit() {
+    // Submission freeze (2026-11-27) — mirrored server-side in api/turso.js (SUBMISSIONS_CLOSED).
+    if (SUBMISSIONS_CLOSED) { setSubmitError('New TA/DA claim submissions are closed on this dashboard.'); return; }
     const stillUploading = travelBills.some(b => b.receiptData === '…uploading') || miscExpenses.some(m => m.receiptData === '…uploading');
     if (stillUploading) { setSubmitError('Please wait — file attachments are still uploading.'); return; }
 
