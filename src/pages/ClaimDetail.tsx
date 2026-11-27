@@ -511,7 +511,11 @@ const LONG_TERM_EXEMPT_ASSIGNMENTS = new Set<string>(['269924']);
 
 // Paid bills whose claim-detail amounts must stay frozen at what was approved and paid
 // (never the live recompute). Add a bill number only after HR confirms the paid figure.
-const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508']);
+// TADA-2026-00504 (Saurabh Kohli, EMP-3922, assignment 268837): paid ₹23,795 (NEFT, 19 Oct 2026).
+// Its misc item was also submitted/paid on sibling bill TADA-2026-00578, so the live recompute
+// dedups everything and showed Eligible/Approved/Net Payable ₹0 — which risked it being paid
+// again. It must show the disbursed ₹23,795.
+const PAID_CLAIMS_FROZEN_AMOUNTS = new Set<string>(['TADA-2026-00508', 'TADA-2026-00504']);
 
 // Paid bills that must show the LIVE recompute instead of the stored (frozen) totals because the
 // stored figures are stale. TADA-2026-00603 (Shova Kant Sharma, EMP-2188): DA eligibility for the
