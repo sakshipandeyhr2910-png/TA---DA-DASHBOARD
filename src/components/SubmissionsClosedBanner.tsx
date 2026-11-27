@@ -9,7 +9,7 @@ export default function SubmissionsClosedBanner({ className = '' }: { className?
       <div>
         <p className="text-sm font-semibold text-red-800">New claim submissions are closed</p>
         <p className="text-xs text-red-700 mt-0.5">
-          New TA/DA claims can no longer be submitted from this dashboard. Claims already submitted are not affected and will continue to be processed.
+          New TA/DA claims can no longer be submitted from this dashboard. Kindly use the new TADA dashboard from RMS to submit your claims.
         </p>
       </div>
     </div>
